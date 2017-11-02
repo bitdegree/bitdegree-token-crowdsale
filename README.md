@@ -1,1 +1,1 @@
-# bitdegree-token-crowdsale
+# BitDegree Smart Contracts

@@ -1,0 +1,21 @@
+{
+  "name": "test-c",
+  "version": "1.0.0",
+  "description": "",
+  "main": "truffle.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "truffle test",
+    "coverage": "./node_modules/.bin/solidity-coverage"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "zeppelin-solidity": "^1.2.0"
+  },
+  "devDependencies": {
+    "solidity-coverage": "^0.2.5"
+  }
+}
