@@ -3,8 +3,8 @@ pragma solidity^0.4.15;
 import "zeppelin-solidity/contracts/token/PausableToken.sol";
 
 contract BitDegreeToken is PausableToken {
-    string public name = "BitDegree Token";
-    string public symbol = "BDG";
+    string public constant name = "BitDegree Token";
+    string public constant symbol = "BDG";
     uint256 public constant decimals = 18;
 
     uint256 public constant totalSupply = 1500000000 * (10**decimals);
