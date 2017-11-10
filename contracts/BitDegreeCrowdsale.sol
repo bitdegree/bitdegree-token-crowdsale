@@ -104,9 +104,9 @@ contract BitDegreeCrowdsale {
         require(_startTime >= now);
         require(_endTime >= _startTime);
         require(_rate > 0);
-        require(_wallet != 0x0);
-        require(_token != 0x0);
-        require(_owner != 0x0);
+        require(_wallet != address(0));
+        require(_token != address(0));
+        require(_owner != address(0));
 
         startTime = _startTime;
         endTime = _endTime;
@@ -129,7 +129,7 @@ contract BitDegreeCrowdsale {
      * @param beneficiary The address that should receive bought tokens
      */
     function buyTokens(address beneficiary) public payable {
-        require(beneficiary != 0x0);
+        require(beneficiary != address(0));
         require(validPurchase());
 
         uint256 weiAmount = msg.value;
