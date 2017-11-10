@@ -5,12 +5,12 @@ import "zeppelin-solidity/contracts/token/PausableToken.sol";
 contract BitDegreeToken is PausableToken {
     string public constant name = "BitDegree Token";
     string public constant symbol = "BDG";
-    uint256 public constant decimals = 18;
+    uint8 public constant decimals = 18;
 
-    uint256 public constant totalSupply = 1500000000 * (10**decimals);
+    uint256 public constant totalSupply = 1500000000 * (10 ** uint256(decimals));
 
-    uint256 public constant publicAmount = 765000000 * (10**decimals); // Tokens for public
-    uint256 public constant lockedAmount = 150000000 * (10**decimals); // BitDegree foundation, locked for 160 days
+    uint256 public constant publicAmount = 765000000 * (10 ** uint256(decimals)); // Tokens for public
+    uint256 public constant lockedAmount = 150000000 * (10 ** uint256(decimals)); // BitDegree foundation, locked for 160 days
 
     uint public startTime;
     uint public lockReleaseTime;
