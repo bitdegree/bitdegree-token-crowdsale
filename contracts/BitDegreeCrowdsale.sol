@@ -194,7 +194,6 @@ contract BitDegreeCrowdsale {
      * @dev Returns ether to token holders in case soft cap is not reached.
      */
     function claimRefund() external {
-        require(hasEnded());
         require(isFinalized);
         require(weiRaised < softCap);
 
