@@ -18,10 +18,11 @@ contract BitDegreeToken is PausableToken {
     address public crowdsaleAddress;
 
     function BitDegreeToken(uint _startTime){
-        balances[owner] = totalSupply;
-
         startTime = _startTime;
         lockReleaseTime = startTime + 160 days;
+
+        balances[owner] = totalSupply;
+        Transfer(address(0), owner, totalSupply);
     }
 
     function setCrowdsaleAddress(address _crowdsaleAddress) onlyOwner {
