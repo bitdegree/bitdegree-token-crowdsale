@@ -119,7 +119,7 @@ contract BitDegreeCrowdsale {
     /**
      * @dev Fallback function that can be used to buy tokens. Or in case of the owner, return ether to allow refunds.
      */
-    function () payable {
+    function () external payable {
         if(msg.sender != wallet)
             buyTokens(msg.sender);
     }
@@ -128,7 +128,7 @@ contract BitDegreeCrowdsale {
      * @dev Function for buying tokens
      * @param beneficiary The address that should receive bought tokens
      */
-    function buyTokens(address beneficiary) payable {
+    function buyTokens(address beneficiary) public payable {
         require(beneficiary != 0x0);
         require(validPurchase());
 
@@ -154,7 +154,7 @@ contract BitDegreeCrowdsale {
      * @dev The function that allows the owner to change the token price
      * @param _newRate The new rate that should be used
      */
-    function setRate(uint256 _newRate) public  {
+    function setRate(uint256 _newRate) external {
         require(msg.sender == owner);
         require(_newRate > 0);
         rate = _newRate;
@@ -181,7 +181,7 @@ contract BitDegreeCrowdsale {
     /**
      * @dev The function that should be called by the owner after the crowdsale ends.
      */
-    function finalize() {
+    function finalize() external {
         require(msg.sender == owner);
         require(!isFinalized);
         require(hasEnded() || weiRaised >= hardCap);
@@ -193,7 +193,7 @@ contract BitDegreeCrowdsale {
     /**
      * @dev Returns ether to token holders in case soft cap is not reached.
      */
-    function claimRefund() {
+    function claimRefund() external {
         require(hasEnded());
         require(isFinalized);
         require(weiRaised < softCap);
@@ -214,7 +214,7 @@ contract BitDegreeCrowdsale {
     * @param _owner The address to query the the balance of.
     * @return An uint256 representing the amount owned by the passed address.
     */
-    function balanceOf(address _owner) constant returns (uint256 balance) {
+    function balanceOf(address _owner) external constant returns (uint256 balance) {
         return balances[_owner];
     }
 

@@ -25,12 +25,12 @@ contract BitDegreeToken is PausableToken {
         Transfer(address(0), owner, totalSupply);
     }
 
-    function setCrowdsaleAddress(address _crowdsaleAddress) onlyOwner {
+    function setCrowdsaleAddress(address _crowdsaleAddress) external onlyOwner {
         crowdsaleAddress = _crowdsaleAddress;
         assert(approve(crowdsaleAddress, publicAmount));
     }
 
-    function transfer(address _to, uint _value) returns (bool) {
+    function transfer(address _to, uint _value) public returns (bool) {
         // Only possible after ICO ends
         require(now >= startTime);
 
@@ -41,7 +41,7 @@ contract BitDegreeToken is PausableToken {
         return super.transfer(_to, _value);
     }
 
-    function transferFrom(address _from, address _to, uint _value) returns (bool) {
+    function transferFrom(address _from, address _to, uint _value) public returns (bool) {
         // Only owner's tokens can be transferred before ICO ends
         if (now < startTime)
             require(_from == owner);
