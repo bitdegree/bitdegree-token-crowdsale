@@ -67,6 +67,26 @@ contract('BitDegreeToken', function (accounts) {
         });
     });
 
+    it('should prevent ownership transfers before token lock is released', function () {
+        var token, currentOwner, newOwner = accounts[3];
+        return BitDegreeToken.deployed().then(function (instance) {
+            token = instance;
+            return token.owner.call();
+        }).then(function (_owner) {
+            currentOwner = _owner;
+            assert.notEqual(currentOwner, newOwner);
+            return token.lockReleaseTime.call();
+        }).then(function (lockReleaseTime) {
+            currentTime = web3.eth.getBlock(web3.eth.blockNumber).timestamp;
+            assert.isAbove(lockReleaseTime, currentTime);
+            return token.transferOwnership(newOwner, {from: owner}).catch(function () { });
+        }).then(function () {
+            return token.owner.call();
+        }).then(function (_owner) {
+            assert.equal(_owner, currentOwner);
+        });
+    });
+
     it('should allow regular accounts to set allowance', function () {
         var token, allowanceToSet = 100;
 
@@ -358,6 +378,50 @@ contract('BitDegreeToken', function (accounts) {
         }).then(function (balance) {
             ownerBalanceAfter = balance;
             assert.equal(ownerBalanceAfter.toFixed(), ownerBalanceBefore.sub(transferAmount).toFixed());
+        });
+    });
+
+
+    it('should prevent ownership transfers for non-owners', function () {
+        var token, currentOwner, newOwner = accounts[3], notOwner = accounts[4];
+        return BitDegreeToken.deployed().then(function (instance) {
+            token = instance;
+            return token.owner.call();
+        }).then(function (_owner) {
+            currentOwner = _owner;
+            assert.notEqual(currentOwner, newOwner);
+            return token.lockReleaseTime.call();
+        }).then(function (lockReleaseTime) {
+            currentTime = web3.eth.getBlock(web3.eth.blockNumber).timestamp;
+            assert.isAtLeast(currentTime, lockReleaseTime);
+            return token.transferOwnership(newOwner, {from: notOwner}).catch(function () { });
+        }).then(function () {
+            return token.owner.call();
+        }).then(function (_owner) {
+            assert.notEqual(_owner, newOwner);
+            assert.equal(_owner, currentOwner);
+            assert.notEqual(notOwner, currentOwner);
+        });
+    });
+
+    it('should allow ownership transfers after token lock is released', function () {
+        var token, currentOwner, newOwner = accounts[3];
+        return BitDegreeToken.deployed().then(function (instance) {
+            token = instance;
+            return token.owner.call();
+        }).then(function (_owner) {
+            currentOwner = _owner;
+            assert.notEqual(currentOwner, newOwner);
+            return token.lockReleaseTime.call();
+        }).then(function (lockReleaseTime) {
+            currentTime = web3.eth.getBlock(web3.eth.blockNumber).timestamp;
+            assert.isAtLeast(currentTime, lockReleaseTime);
+            return token.transferOwnership(newOwner, {from: owner});
+        }).then(function () {
+            return token.owner.call();
+        }).then(function (_owner) {
+            assert.equal(_owner, newOwner);
+            return token.transferOwnership(currentOwner, {from: newOwner}); // revert
         });
     });
 

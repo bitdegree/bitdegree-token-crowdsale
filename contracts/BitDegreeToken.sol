@@ -53,4 +53,8 @@ contract BitDegreeToken is PausableToken {
         return super.transferFrom(_from, _to, _value);
     }
 
+    function transferOwnership(address newOwner) public onlyOwner {
+        require(now >= lockReleaseTime);
+        super.transferOwnership(newOwner);
+    }
 }
