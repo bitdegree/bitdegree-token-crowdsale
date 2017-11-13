@@ -507,6 +507,27 @@ contract('BitDegreeCrowdsale', function (accounts) {
         });
     });
 
+
+    it('should prevent the owner from using too high or too low token rates', function () {
+        var rateBefore, minValue = 10000, maxValue = 100000;
+
+        return ico.rate.call().then(function (rate) {
+            rateBefore = rate.toNumber();
+            assert.isAtLeast(rate, minValue);
+            assert.isAtMost(rate, maxValue);
+            return ico.setRate(minValue-1, {from: owner}).catch(function () {});
+        }).then(function () {
+            return ico.rate.call();
+        }, function (rate) {
+            assert.equals(rate.toNumber(), rateBefore);
+            return ico.setRate(maxValue+1, {from: owner}).catch(function () {});
+        }, function () {
+            return ico.rate.call();
+        }, function (rate) {
+            assert.equals(rate.toNumber(), rateBefore);
+        })
+    });
+
     it('should allow the owner to change the token rate', function () {
         var rateBefore, newRate = rate.add(1000);
 

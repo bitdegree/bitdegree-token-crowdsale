@@ -163,7 +163,7 @@ contract BitDegreeCrowdsale {
      * @param _newRate The new rate that should be used
      */
     function setRate(uint256 _newRate) external onlyOwner {
-        require(_newRate > 0);
+        require(_newRate >= 10000 && _newRate <= 100000);
         rate = _newRate;
     }
 
