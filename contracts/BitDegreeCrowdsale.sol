@@ -117,6 +117,14 @@ contract BitDegreeCrowdsale {
     }
 
     /**
+     * @dev Throws if called by any account other than the owner.
+     */
+    modifier onlyOwner() {
+        require(msg.sender == owner);
+        _;
+    }
+
+    /**
      * @dev Fallback function that can be used to buy tokens. Or in case of the owner, return ether to allow refunds.
      */
     function () external payable {
@@ -154,8 +162,7 @@ contract BitDegreeCrowdsale {
      * @dev The function that allows the owner to change the token price
      * @param _newRate The new rate that should be used
      */
-    function setRate(uint256 _newRate) external {
-        require(msg.sender == owner);
+    function setRate(uint256 _newRate) external onlyOwner {
         require(_newRate > 0);
         rate = _newRate;
     }
@@ -181,8 +188,7 @@ contract BitDegreeCrowdsale {
     /**
      * @dev The function that should be called by the owner after the crowdsale ends.
      */
-    function finalize() external {
-        require(msg.sender == owner);
+    function finalize() external onlyOwner {
         require(!isFinalized);
         require(hasEnded() || weiRaised >= hardCap);
 
