@@ -146,14 +146,15 @@ contract BitDegreeCrowdsale {
         // Calculate token amount to be transferred
         uint256 tokens = weiAmount.mul(rate);
 
+        // Distribute only the remaining tokens if final contribution exceeds hard cap
+        if(tokensSold.add(tokens) > hardCap) {
+            tokens = hardCap.sub(tokensSold);
+            weiAmount = tokens.div(rate);
+            returnToSender = msg.value.sub(weiAmount);
+        }
+
         // update state
         tokensSold = tokensSold.add(tokens);
-
-        if(tokensSold > hardCap) {
-            uint256 excessTokens = tokensSold.sub(hardCap);
-            tokensSold = hardCap;
-            returnToSender = excessTokens.div(rate);
-        }
 
         // update balance
         balances[beneficiary] = balances[beneficiary].add(weiAmount);
@@ -162,8 +163,9 @@ contract BitDegreeCrowdsale {
         TokenPurchase(msg.sender, beneficiary, weiAmount, tokens);
 
         // Forward funds
-        wallet.transfer(msg.value);
+        wallet.transfer(weiAmount);
 
+        // Return funds that are over hard cap
         if(returnToSender > 0) {
             msg.sender.transfer(returnToSender);
         }
