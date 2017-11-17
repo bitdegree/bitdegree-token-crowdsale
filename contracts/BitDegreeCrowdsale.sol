@@ -32,6 +32,7 @@ library SafeMath {
 
 contract token {
     function transferFrom(address from, address to, uint256 value) returns (bool);
+    function setStartTime(uint _startTime);
 }
 
 /**
@@ -164,6 +165,11 @@ contract BitDegreeCrowdsale {
 
         // Forward funds
         wallet.transfer(weiAmount);
+
+        // Allow transfers immediately after hard cap is reached
+        if(tokensSold == hardCap) {
+            reward.setStartTime(now);
+        }
 
         // Return funds that are over hard cap
         if(returnToSender > 0) {

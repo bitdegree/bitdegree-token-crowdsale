@@ -152,6 +152,55 @@ contract('BitDegreeToken', function (accounts) {
         });
     });
 
+    it('should allow crowdsale to change start time but only to a value that is earlier than current start time', function () {
+        var startTimeBefore, startTimeAfter, newStartTime;
+
+        return token.startTime.call().then(function (startTime) {
+            startTimeBefore = startTime;
+            newStartTime = startTime.add(150); // attempt setting in the future first
+            assert.isTrue(newStartTime.gt(startTime), 'new start time is after the current start time');
+            return token.setStartTime(newStartTime, {from: crowdsale}); // no exception should be thrown
+        }).then(function () {
+            return token.startTime.call();
+        }).then(function (startTime) {
+            startTimeAfter = startTime;
+            assert.isTrue(startTimeBefore.eq(startTimeAfter), 'start time remained unchanged');
+
+            // now attempt setting a time that's before current start time
+            startTimeBefore = startTimeAfter;
+            newStartTime = startTimeBefore.sub(100);
+            assert.isTrue(newStartTime.lt(startTimeBefore), 'start time is before the current start time');
+            return token.setStartTime(newStartTime, {from: crowdsale});
+        }).then(function () {
+            return token.startTime.call();
+        }).then(function (startTime) {
+            startTimeAfter = startTime;
+            assert.isFalse(startTimeBefore.eq(startTimeAfter), 'start time was changed');
+            assert.isTrue(startTimeAfter.eq(newStartTime), 'start time was changed to the new value');
+        })
+    });
+
+    it('should prevent non-crowdsale addresses from manipulating the start time', function () {
+        var startTimeBefore, startTimeAfter, newStartTime;
+
+        return token.startTime.call().then(function (startTime) {
+            startTimeBefore = startTime;
+            newStartTime = startTimeBefore.sub(100);
+
+            return new Promise(function (resolve, reject) {
+                token.setStartTime(newStartTime, {from: owner}).then(function () {
+                    reject(new Error('setStartTime did not throw an error for a non-crowdsale address'));
+                }).catch(function () {
+                    token.startTime.call().then(function (startTime) {
+                        startTimeAfter = startTime;
+                        assert.isTrue(startTimeBefore.eq(startTimeAfter), 'start time remained unchanged');
+                        resolve();
+                    }).catch(reject);
+                })
+            });
+        });
+    });
+
     it('should prevent transfers before start time', function () {
         var startTime, balanceBefore, balanceAfter, transferAmount = new Big(100);
 
@@ -431,12 +480,12 @@ contract('BitDegreeCrowdsale', function (accounts) {
     var token, ico, rate = 10000, owner = accounts[0], wallet = accounts[9], startTime, endTime, softCap, hardCap;
 
     function resetContracts(cb) {
-        BitDegreeToken.new().then(function (instance) {
-            token = instance;
-            return advanceTime(1000);
-        }).then(function (newTime) {
-            startTime = newTime.add(1000);
+        advanceTime(1000).then(function (time) {
+            startTime = time.add(1000);
             endTime = startTime.add(1000);
+            return BitDegreeToken.new(endTime);
+        }).then(function (instance) {
+            token = instance;
             return token.owner.call();
         }).then(function (_owner) {
             return BitDegreeCrowdsale.new(
@@ -668,8 +717,11 @@ contract('BitDegreeCrowdsale', function (accounts) {
     });
 
     it('should be possible to reach hard cap', function () {
-        var tokensSold, hardCap, toSpend;
-        return ico.tokensSold.call().then(function (_sold) {
+        var tokensSold, hardCap, toSpend, startTimeBefore, startTimeAfter;
+        return token.startTime.call().then(function (startTime) {
+            startTimeBefore = startTime;
+            return ico.tokensSold.call();
+        }).then(function (_sold) {
             tokensSold = _sold;
             return ico.hardCap.call();
         }).then(function (_hardCap) {
@@ -678,9 +730,13 @@ contract('BitDegreeCrowdsale', function (accounts) {
             toSpend = hardCap.sub(tokensSold).div(rate);
             return ico.buyTokens(accounts[1], {from: accounts[1], value: toSpend.toFixed()});
         }).then(function () {
-            // check if exactly the maximum number of public tokens was sold
+            return token.startTime.call();
+        }).then(function (startTime) {
+            startTimeAfter = startTime;
+            assert.isTrue(startTimeAfter.lt(startTimeBefore), 'start time was reduced');
             return ico.tokensSold.call();
         }).then(function (sold) {
+            // check if exactly the maximum number of public tokens was sold
             assert.isTrue(sold.eq(hardCap), 'exactly hard cap was sold');
         });
     });
@@ -823,10 +879,13 @@ contract('BitDegreeCrowdsale', function (accounts) {
 
     it('should return excess ether to the buyer if their contribution exceeds the hard cap', function (cb) {
         resetContracts(function () {
-            var transferAmount, soldBefore, soldAfter, walletBefore, walletAfter, accountBalanceBefore, accountBalanceAfter, tokensBefore, tokensAfter, contributionBefore, contributionAfter, hardCap, hardCapPrice, rate, wallet;
+            var transferAmount, soldBefore, soldAfter, walletBefore, walletAfter, accountBalanceBefore, accountBalanceAfter, tokensBefore, tokensAfter, contributionBefore, contributionAfter, hardCap, hardCapPrice, rate, wallet, startTimeBefore, startTimeAfter;
             var account = accounts[2], exceedBy = new Big(1500000000);
 
-            ico.hardCap.call().then(function (cap) {
+            token.startTime.call().then(function (startTime) {
+                startTimeBefore = startTime;
+                return ico.hardCap.call();
+            }).then(function (cap) {
                 hardCap = cap;
                 return ico.wallet.call();
             }).then(function (_wallet) {
@@ -862,6 +921,10 @@ contract('BitDegreeCrowdsale', function (accounts) {
                 assert.isTrue(tokensBefore.eq(0), 'account does not hold any tokens');
                 return ico.buyTokens(account, {from: account, value: transferAmount});
             }).then(function () {
+                return token.startTime.call();
+            }).then(function (startTime) {
+                startTimeAfter = startTime;
+                assert.isTrue(startTimeAfter.lt(startTimeBefore), 'token transfer start time was reduced');
                 return ico.balanceOf.call(account);
             }).then(function (balance) {
                 contributionAfter = balance;

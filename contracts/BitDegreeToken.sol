@@ -30,6 +30,13 @@ contract BitDegreeToken is PausableToken {
         assert(approve(crowdsaleAddress, publicAmount));
     }
 
+    function setStartTime(uint _startTime) external {
+        require(msg.sender == crowdsaleAddress);
+        if(_startTime < startTime) {
+            startTime = _startTime;
+        }
+    }
+
     function transfer(address _to, uint _value) public returns (bool) {
         // Only possible after ICO ends
         require(now >= startTime);
