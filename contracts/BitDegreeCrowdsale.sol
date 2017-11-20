@@ -69,6 +69,9 @@ contract BitDegreeCrowdsale {
     // Hard cap in BDG tokens
     uint256 constant public hardCap = 765000000 * (10**18);
 
+    // Switched to true once token contract is notified of when to enable token transfers
+    bool private isStartTimeSet = false;
+
     /**
      * @dev Event for token purchase logging
      * @param purchaser Address that paid for the tokens
@@ -169,6 +172,12 @@ contract BitDegreeCrowdsale {
         // Allow transfers immediately after hard cap is reached
         if(tokensSold == hardCap) {
             reward.setStartTime(now);
+        }
+
+        // Notify token contract about sale end time
+        if(!isStartTimeSet) {
+            isStartTimeSet = true;
+            reward.setStartTime(endTime);
         }
 
         // Return funds that are over hard cap

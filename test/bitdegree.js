@@ -153,7 +153,7 @@ contract('BitDegreeToken', function (accounts) {
     });
 
     it('should allow crowdsale to change start time but only to a value that is earlier than current start time', function () {
-        var startTimeBefore, startTimeAfter, newStartTime;
+        var startTimeBefore, startTimeAfter, lockTimeBefore, lockTimeAfter, newStartTime;
 
         return token.startTime.call().then(function (startTime) {
             startTimeBefore = startTime;
@@ -161,10 +161,14 @@ contract('BitDegreeToken', function (accounts) {
             assert.isTrue(newStartTime.gt(startTime), 'new start time is after the current start time');
             return token.setStartTime(newStartTime, {from: crowdsale}); // no exception should be thrown
         }).then(function () {
+            return token.lockReleaseTime.call();
+        }).then(function (lockReleaseTime) {
+            lockTimeBefore = lockReleaseTime;
             return token.startTime.call();
         }).then(function (startTime) {
             startTimeAfter = startTime;
             assert.isTrue(startTimeBefore.eq(startTimeAfter), 'start time remained unchanged');
+            assert.isTrue(startTimeBefore.eq(lockTimeBefore.sub(3600 * 24 * 160)), 'lock release is exactly 160 days in the future');
 
             // now attempt setting a time that's before current start time
             startTimeBefore = startTimeAfter;
@@ -172,11 +176,15 @@ contract('BitDegreeToken', function (accounts) {
             assert.isTrue(newStartTime.lt(startTimeBefore), 'start time is before the current start time');
             return token.setStartTime(newStartTime, {from: crowdsale});
         }).then(function () {
+            return token.lockReleaseTime.call();
+        }).then(function (lockReleaseTime) {
+            lockTimeAfter = lockReleaseTime;
             return token.startTime.call();
         }).then(function (startTime) {
             startTimeAfter = startTime;
             assert.isFalse(startTimeBefore.eq(startTimeAfter), 'start time was changed');
             assert.isTrue(startTimeAfter.eq(newStartTime), 'start time was changed to the new value');
+            assert.isTrue(startTimeAfter.eq(lockTimeAfter.sub(3600 * 24 * 160)), 'lock release is still exactly 160 days in the future');
         })
     });
 
@@ -483,7 +491,7 @@ contract('BitDegreeCrowdsale', function (accounts) {
         advanceTime(1000).then(function (time) {
             startTime = time.add(1000);
             endTime = startTime.add(1000);
-            return BitDegreeToken.new(endTime);
+            return BitDegreeToken.new();
         }).then(function (instance) {
             token = instance;
             return token.owner.call();
@@ -566,20 +574,31 @@ contract('BitDegreeCrowdsale', function (accounts) {
         }).catch(function () {});
     });
 
-
     it('should accept investments and correctly distribute tokens', function () {
-        var balanceBefore, balanceAfter, tokensBefore, tokensAfter, soldBefore, soldAfter, account = accounts[1], amount = new Big(500);
+        var balanceBefore, balanceAfter, tokensBefore, tokensAfter, soldBefore, soldAfter, startTimeBefore, startTimeAfter, crowdsaleEndTime, account = accounts[1], amount = new Big(500);
 
         return ico.balanceOf.call(account).then(function (balance) {
             balanceBefore = balance;
             return ico.tokensSold.call();
         }).then(function (balance) {
             soldBefore = balance;
+            assert.isTrue(soldBefore.eq(0), '0 tokens have been sold - this is the first contribution');
+            return token.startTime.call();
+        }).then(function (startTime) {
+            startTimeBefore = startTime;
+            return ico.endTime.call();
+        }).then(function (endTime) {
+            crowdsaleEndTime = endTime;
+            assert.isTrue(crowdsaleEndTime.lt(startTimeBefore), 'initially token transfer start time is not the same as crowdsale end time');
             return token.balanceOf.call(account);
         }).then(function (balance) {
             tokensBefore = balance;
             return ico.buyTokens(account, {from: account, value: amount});
         }).then(function () {
+            return token.startTime.call();
+        }).then(function (startTime) {
+            startTimeAfter = startTime;
+            assert.isTrue(startTimeAfter.eq(crowdsaleEndTime), 'token start time was changed to match end time of the crowdsale');
             return ico.balanceOf.call(account);
         }).then(function (balance) {
             balanceAfter = balance;
@@ -646,13 +665,17 @@ contract('BitDegreeCrowdsale', function (accounts) {
     });
 
     it('should accept investments for third party beneficiaries and correctly distribute their tokens', function () {
-        var balanceBefore, balanceAfter, tokensBefore, tokensAfter, soldBefore, soldAfter, account = accounts[1], beneficiary = accounts[2], amount = new Big(30);
+        var balanceBefore, balanceAfter, tokensBefore, tokensAfter, soldBefore, soldAfter, startTimeBefore, startTimeAfter, account = accounts[1], beneficiary = accounts[2], amount = new Big(30);
 
         return ico.balanceOf.call(beneficiary).then(function (balance) {
             balanceBefore = balance;
             return ico.tokensSold.call();
         }).then(function (balance) {
             soldBefore = balance;
+            assert.isTrue(soldBefore.gt(0), 'some tokens were already sold');
+            return token.startTime.call();
+        }).then(function (startTime) {
+            startTimeBefore = startTime;
             return token.balanceOf.call(beneficiary);
         }).then(function (balance) {
             tokensBefore = balance;
@@ -666,6 +689,10 @@ contract('BitDegreeCrowdsale', function (accounts) {
         }).then(function (balance) {
             soldAfter = balance;
             assert.isTrue(soldAfter.eq(soldBefore.add(amount.mul(rate))), 'sold tokens counter was increased correctly');
+            return token.startTime.call();
+        }).then(function (startTime) {
+            startTimeAfter = startTime;
+            assert.isTrue(startTimeBefore.eq(startTimeAfter), 'start time remained unchanged');
             return token.balanceOf.call(beneficiary);
         }).then(function (balance) {
             tokensAfter = balance;

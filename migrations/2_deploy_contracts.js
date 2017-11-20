@@ -4,7 +4,7 @@ var BitDegreeToken = artifacts.require("./BitDegreeToken.sol");
 module.exports = function(deployer) {
   const startTime = web3.eth.getBlock(web3.eth.blockNumber).timestamp + 1000, endTime = startTime + 1000;
 
-  deployer.deploy(BitDegreeToken, endTime);
+  deployer.deploy(BitDegreeToken);
 
   BitDegreeToken.deployed().then(function (instance) {
       instance.owner.call().then(function(owner){

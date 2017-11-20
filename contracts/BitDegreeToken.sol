@@ -14,12 +14,13 @@ contract BitDegreeToken is PausableToken {
 
     uint public startTime;
     uint public lockReleaseTime;
+    uint private constant lockDuration = 160 days;
 
     address public crowdsaleAddress;
 
-    function BitDegreeToken(uint _startTime){
-        startTime = _startTime;
-        lockReleaseTime = startTime + 160 days;
+    function BitDegreeToken(){
+        startTime = now + 70 days;
+        lockReleaseTime = startTime + lockDuration;
 
         balances[owner] = totalSupply;
         Transfer(address(0), owner, totalSupply);
@@ -34,6 +35,7 @@ contract BitDegreeToken is PausableToken {
         require(msg.sender == crowdsaleAddress);
         if(_startTime < startTime) {
             startTime = _startTime;
+            lockReleaseTime = startTime + lockDuration;
         }
     }
 
