@@ -16,19 +16,23 @@ contract('BitDegreeToken', function (accounts) {
     });
 
     it('should initialize token distribution', function () {
-        var totalSupply, lockedAmount, reservedAmount, publicAmount;
+        var totalSupply, lockedFoundation, lockedTeam, publicAmount;
         return token.totalSupply.call().then(function (_totalSupply) {
             totalSupply = _totalSupply;
-            return token.lockedAmount.call();
+            return token.foundationLockAmount.call();
         }).then(function (_lockedAmount) {
-            lockedAmount = _lockedAmount;
+            lockedFoundation = _lockedAmount;
+            return token.teamLockAmount.call();
+        }).then(function (_lockedAmount) {
+            lockedTeam = _lockedAmount;
             return token.publicAmount.call();
         }).then(function (_publicAmount) {
             publicAmount = _publicAmount;
             assert.isTrue(totalSupply.gt(0), 'total supply is a non-zero value');
             assert.isTrue(publicAmount.lt(totalSupply), 'public amount is lower than total supply');
-            assert.isTrue(lockedAmount.lt(totalSupply), 'locked amount is lower than total supply');
-            assert.isTrue(publicAmount.add(lockedAmount).lte(totalSupply), 'public amount and locked amount do not exceed total supply');
+            assert.isTrue(lockedFoundation.lt(totalSupply), 'locked foundation amount is lower than total supply');
+            assert.isTrue(lockedTeam.lt(totalSupply), 'locked team amount is lower than total supply');
+            assert.isTrue(publicAmount.add(lockedFoundation).add(lockedTeam).lte(totalSupply), 'public amount and locked amount do not exceed total supply');
         });
     });
 
@@ -39,39 +43,70 @@ contract('BitDegreeToken', function (accounts) {
     });
 
     it('should set correctly the initial balance of the owner', function () {
-        var totalSupply;
+        var totalSupply, lockedFoundation, lockedTeam, ownerBalance, zeroAddressBalance;
 
         return token.totalSupply.call().then(function (_totalSupply) {
             totalSupply = _totalSupply;
+            return token.foundationLockAmount.call();
+        }).then(function (_lockedAmount) {
+            lockedFoundation = _lockedAmount;
+            return token.teamLockAmount.call();
+        }).then(function (_lockedAmount) {
+            lockedTeam = _lockedAmount;
             return token.balanceOf.call(owner);
         }).then(function (balance) {
-            assert.isTrue(totalSupply.eq(balance), 'owner hold all of the tokens');
+            ownerBalance = balance;
+            return token.balanceOf.call(0);
+        }).then(function (balance) {
+            zeroAddressBalance = balance;
+            var lockedTotal = lockedFoundation.add(lockedTeam);
+            assert.isTrue(zeroAddressBalance.eq(lockedTotal), '0x0000 address holds the locked amount');
+            assert.isTrue(totalSupply.sub(lockedTotal).eq(ownerBalance), 'owner holds all of the tokens (except for locked amount)');
+            assert.isTrue(zeroAddressBalance.add(ownerBalance).eq(totalSupply), 'initially zero address and owner together should hold all of the tokens');
         })
     });
 
-    it('should set the start and lock times', function () {
+    it('should set the start time', function () {
         var startTime;
 
         return token.startTime.call().then(function (_startTime) {
             startTime = _startTime;
             assert.isTrue(startTime.gt(0), 'start time is set');
-            return token.lockReleaseTime.call();
-        }).then(function (lockReleaseTime) {
-            assert.isTrue(startTime.add(160 * 3600 * 24).eq(lockReleaseTime), 'lock release time is set to exactly 160 days from start time');
         });
     });
 
-    it('should prevent ownership transfers before token lock is released', function () {
-        var currentOwner, newOwner = accounts[3], lockReleaseTime;
+    it('should correctly initialize lock duration and withdrawal state', function () {
+        var fLockDuration, tLockDuration, fState, tState;
+
+        return token.foundationLockDuration.call().then(function (duration) {
+            fLockDuration = duration;
+            assert.isTrue(fLockDuration.eq(3600 * 24 * 360), 'foundation lock is equal to 360 days');
+            return token.teamLockDuration.call();
+        }).then(function (duration) {
+            tLockDuration = duration;
+            assert.isTrue(tLockDuration.eq(3600 * 24 * 720), 'team lock is equal to 720 days');
+            return token.foundationLockWithdrawn.call();
+        }).then(function (state) {
+            fState = state;
+            assert.isFalse(fState, 'initially foundation lock withdrawal state is false');
+            return token.teamLockWithdrawn.call();
+        }).then(function (state) {
+            tState = state;
+            assert.isFalse(tState, 'initially team lock withdrawal state is false');
+        });
+    });
+
+    it('should prevent ownership transfers before start time', function () {
+        var currentOwner, newOwner = accounts[3], startTime;
         return token.owner.call().then(function (_owner) {
             currentOwner = _owner;
             assert.notEqual(currentOwner, newOwner);
-            return token.lockReleaseTime.call();
-        }).then(function (_lockReleaseTime) {
-            lockReleaseTime = _lockReleaseTime;
+            return token.startTime.call();
+        }).then(function (_startTime) {
+            startTime = _startTime;
             return getTime();
         }).then(function (currentTime) {
-            assert.isTrue(lockReleaseTime.gt(currentTime), 'lock release time is in the future');
+            assert.isTrue(startTime.gt(currentTime), 'start time is in the future');
             return token.transferOwnership(newOwner, {from: owner}).catch(function () { });
         }).then(function () {
             return token.owner.call();
@@ -153,7 +188,7 @@ contract('BitDegreeToken', function (accounts) {
     });
 
     it('should allow crowdsale to change start time but only to a value that is earlier than current start time', function () {
-        var startTimeBefore, startTimeAfter, lockTimeBefore, lockTimeAfter, newStartTime;
+        var startTimeBefore, startTimeAfter, newStartTime;
 
         return token.startTime.call().then(function (startTime) {
             startTimeBefore = startTime;
@@ -161,14 +196,10 @@ contract('BitDegreeToken', function (accounts) {
             assert.isTrue(newStartTime.gt(startTime), 'new start time is after the current start time');
             return token.setStartTime(newStartTime, {from: crowdsale}); // no exception should be thrown
         }).then(function () {
-            return token.lockReleaseTime.call();
-        }).then(function (lockReleaseTime) {
-            lockTimeBefore = lockReleaseTime;
             return token.startTime.call();
         }).then(function (startTime) {
             startTimeAfter = startTime;
             assert.isTrue(startTimeBefore.eq(startTimeAfter), 'start time remained unchanged');
-            assert.isTrue(startTimeBefore.eq(lockTimeBefore.sub(3600 * 24 * 160)), 'lock release is exactly 160 days in the future');
 
             // now attempt setting a time that's before current start time
             startTimeBefore = startTimeAfter;
@@ -176,15 +207,11 @@ contract('BitDegreeToken', function (accounts) {
             assert.isTrue(newStartTime.lt(startTimeBefore), 'start time is before the current start time');
             return token.setStartTime(newStartTime, {from: crowdsale});
         }).then(function () {
-            return token.lockReleaseTime.call();
-        }).then(function (lockReleaseTime) {
-            lockTimeAfter = lockReleaseTime;
             return token.startTime.call();
         }).then(function (startTime) {
             startTimeAfter = startTime;
             assert.isFalse(startTimeBefore.eq(startTimeAfter), 'start time was changed');
             assert.isTrue(startTimeAfter.eq(newStartTime), 'start time was changed to the new value');
-            assert.isTrue(startTimeAfter.eq(lockTimeAfter.sub(3600 * 24 * 160)), 'lock release is still exactly 160 days in the future');
         })
     });
 
@@ -347,26 +374,15 @@ contract('BitDegreeToken', function (accounts) {
         });
     });
 
-    it('should prevent the owner from spending more than the locked amount', function () {
-        var lockReleaseTime, ownerBalanceBefore, ownerBalanceAfter, balanceBefore, balanceAfter, lockedAmount;
+    it('should prevent the owner from spending more than the current balance', function () {
+        var ownerBalanceBefore, ownerBalanceAfter, balanceBefore, balanceAfter, lockedAmount;
 
-        return token.lockReleaseTime.call().then(function (timestamp) {
-            lockReleaseTime = timestamp;
-            return getTime();
-        }).then(function (currentTime) {
-            assert.isTrue(currentTime.lt(lockReleaseTime));
-            return token.balanceOf.call(owner);
-        }).then(function (balance) {
+        return token.balanceOf.call(owner).then(function (balance) {
             ownerBalanceBefore = balance;
             return token.balanceOf.call(accounts[1]);
         }).then(function (balance) {
             balanceBefore = balance;
-            return token.lockedAmount.call();
-        }).then(function (_lockedAmount) {
-            lockedAmount = _lockedAmount;
-            assert.isTrue(_lockedAmount.gt(0), 'locked amount is a non-zero value');
-            assert.isTrue(ownerBalanceBefore.gt(lockedAmount), 'owner has more tokens in balance than the locked amount');
-            var amountToSpend = ownerBalanceBefore.sub(lockedAmount).add(1);
+            var amountToSpend = ownerBalanceBefore.add(1);
             return token.transfer(accounts[1], amountToSpend, {from: owner}).catch(function () {});
         }).then(function () {
             return token.balanceOf.call(accounts[1]);
@@ -380,51 +396,280 @@ contract('BitDegreeToken', function (accounts) {
         });
     });
 
-    it('should allow owner to spend more than the locked amount after lock is released', function () {
-        var lockReleaseTime, ownerBalanceBefore, ownerBalanceAfter, balanceBefore, balanceAfter, lockedAmount, transferAmount;
+    it('should prevent owner from withdrawing amount locked for foundation before lock duration passes', function () {
+        var startTime, fLockDuration, zBalanceBefore, zBalanceAfter, oBalanceBefore, oBalanceAfter;
 
-        return token.lockReleaseTime.call().then(function (timestamp) {
-            lockReleaseTime = timestamp;
-            return advanceTime(lockReleaseTime);
+        return token.startTime.call().then(function (_startTime) {
+            startTime = _startTime;
+            return token.foundationLockDuration.call();
+        }).then(function (_foundationLockDuration) {
+            fLockDuration = _foundationLockDuration;
+            return getTime();
         }).then(function (currentTime) {
-            assert.isTrue(currentTime.gt(lockReleaseTime), 'lock release date had passed');
+            assert.isTrue(currentTime.lt(startTime.add(fLockDuration)), 'foundation lock duration had not passed yet');
+            return token.balanceOf.call(0);
+        }).then(function (balance) {
+            zBalanceBefore = balance;
             return token.balanceOf.call(owner);
         }).then(function (balance) {
-            ownerBalanceBefore = balance;
-            return token.balanceOf.call(accounts[1]);
-        }).then(function (balance) {
-            balanceBefore = balance;
-            return token.lockedAmount.call();
-        }).then(function (_lockedAmount) {
-            lockedAmount = _lockedAmount;
-            assert.isTrue(lockedAmount.gt(0), 'locked amount is a non-zero value');
-            transferAmount = ownerBalanceBefore.sub(lockedAmount).add(1);
-            return token.transfer(accounts[1], transferAmount, {from: owner});
+            oBalanceBefore = balance;
+            return token.foundationLockWithdrawn.call();
+        }).then(function (state) {
+            assert.isFalse(state, 'withdrawal state is set to false');
+            return token.withdrawLocked({from: owner});
         }).then(function () {
-            return token.balanceOf.call(accounts[1]);
+            return token.balanceOf.call(0);
         }).then(function (balance) {
-            balanceAfter = balance;
+            zBalanceAfter = balance;
+            assert.isTrue(zBalanceBefore.eq(zBalanceAfter), 'zero address balance remained unchanged');
             return token.balanceOf.call(owner);
         }).then(function (balance) {
-            ownerBalanceAfter = balance;
-            assert.isTrue(balanceAfter.eq(balanceBefore.add(transferAmount)), 'recipient balance was increased by the correct amount');
-            assert.isTrue(ownerBalanceAfter.eq(ownerBalanceBefore.sub(transferAmount)), 'owner balance was reduced by the correct amount');
+            oBalanceAfter = balance;
+            assert.isTrue(oBalanceBefore.eq(oBalanceAfter), 'owner balance remained unchanged');
+            return token.foundationLockWithdrawn.call();
+        }).then(function (state) {
+            assert.isFalse(state, 'withdrawal state is still set to false');
         });
     });
 
+    it('should prevent non-owner from withdrawing locked foundation amount after lock duration passes', function () {
+        var zBalanceBefore, zBalanceAfter, oBalanceBefore, oBalanceAfter, startTime, fLockDuration, lockEndsAt, nonOwner = accounts[2];
+
+        return token.startTime.call().then(function (_startTime) {
+            startTime = _startTime;
+            return token.foundationLockDuration.call();
+        }).then(function (_foundationLockDuration) {
+            fLockDuration = _foundationLockDuration;
+            lockEndsAt = startTime.add(fLockDuration);
+            return advanceTime(lockEndsAt);
+        }).then(function (currentTime) {
+            assert.isTrue(currentTime.gte(lockEndsAt), 'lock end time had passed');
+            return token.balanceOf.call(0);
+        }).then(function (balance) {
+            zBalanceBefore = balance;
+            return token.balanceOf.call(owner);
+        }).then(function (balance) {
+            oBalanceBefore = balance;
+            return token.foundationLockWithdrawn.call();
+        }).then(function (state) {
+            assert.isFalse(state, 'withdrawal state is set to false');
+            assert.notEqual(owner, nonOwner, 'the account making the transaction is not an owner');
+            return token.withdrawLocked({from: nonOwner}).catch(function () { });
+        }).then(function () {
+            return token.foundationLockWithdrawn.call();
+        }).then(function (state) {
+            assert.isFalse(state, 'withdrawal state is still set to false');
+            return token.balanceOf.call(0);
+        }).then(function (balance) {
+            zBalanceAfter = balance;
+            assert.isTrue(zBalanceBefore.eq(zBalanceAfter), 'zero address balance remained unchanged');
+            return token.balanceOf.call(owner);
+        }).then(function (balance) {
+            oBalanceAfter = balance;
+            assert.isTrue(oBalanceBefore.eq(oBalanceAfter), 'owner balance remained unchanged');
+        });
+    });
+
+    it('should allow owner to withdraw locked foundation amount after lock duration passes', function () {
+        var zBalanceBefore, zBalanceAfter, oBalanceBefore, oBalanceAfter, startTime, fLockDuration, lockEndsAt, amount;
+
+        return token.startTime.call().then(function (_startTime) {
+            startTime = _startTime;
+            return token.foundationLockDuration.call();
+        }).then(function (_foundationLockDuration) {
+            fLockDuration = _foundationLockDuration;
+            lockEndsAt = startTime.add(fLockDuration);
+            return getTime();
+        }).then(function (currentTime) {
+            assert.isTrue(currentTime.gte(lockEndsAt), 'lock end time had passed');
+            return token.balanceOf.call(0);
+        }).then(function (balance) {
+            zBalanceBefore = balance;
+            return token.balanceOf.call(owner);
+        }).then(function (balance) {
+            oBalanceBefore = balance;
+            return token.foundationLockAmount.call();
+        }).then(function (_amount) {
+            amount = _amount;
+            assert.isTrue(amount.gt(0), 'locked amount is greater than 0');
+            return token.foundationLockWithdrawn.call();
+        }).then(function (state) {
+            assert.isFalse(state, 'withdrawal state is set to false');
+            return token.withdrawLocked({from: owner});
+        }).then(function () {
+            return token.foundationLockWithdrawn.call();
+        }).then(function (state) {
+            assert.isTrue(state, 'withdrawal state is set to true');
+            return token.balanceOf.call(0);
+        }).then(function (balance) {
+            zBalanceAfter = balance;
+            assert.isTrue(zBalanceBefore.sub(amount).eq(zBalanceAfter), 'zero address balance was reduced by the locked amount');
+            return token.balanceOf.call(owner);
+        }).then(function (balance) {
+            oBalanceAfter = balance;
+            assert.isTrue(oBalanceBefore.add(amount).eq(oBalanceAfter), 'owner balance was increased by the locked amount');
+
+            // Attempt to repeat the withdrawal
+            zBalanceBefore = zBalanceAfter;
+            oBalanceBefore = oBalanceAfter;
+            zBalanceAfter = null;
+            oBalanceAfter = null;
+            return token.withdrawLocked({from: owner});
+        }).then(function () {
+            return token.balanceOf.call(0);
+        }).then(function (balance) {
+            zBalanceAfter = balance;
+            assert.isTrue(zBalanceBefore.eq(zBalanceAfter), 'zero address balance remained unchanged');
+            return token.balanceOf.call(owner);
+        }).then(function (balance) {
+            oBalanceAfter = balance;
+            assert.isTrue(oBalanceBefore.eq(oBalanceAfter), 'owner balance remained unchanged');
+        });
+    });
+
+    it('should prevent owner from withdrawing amount locked for team before lock duration passes', function () {
+        var startTime, tLockDuration, zBalanceBefore, zBalanceAfter, oBalanceBefore, oBalanceAfter;
+
+        return token.startTime.call().then(function (_startTime) {
+            startTime = _startTime;
+            return token.teamLockDuration.call();
+        }).then(function (_teamLockDuration) {
+            tLockDuration = _teamLockDuration;
+            return getTime();
+        }).then(function (currentTime) {
+            assert.isTrue(currentTime.lt(startTime.add(tLockDuration)), 'team lock duration had not passed yet');
+            return token.balanceOf.call(0);
+        }).then(function (balance) {
+            zBalanceBefore = balance;
+            return token.balanceOf.call(owner);
+        }).then(function (balance) {
+            oBalanceBefore = balance;
+            return token.teamLockWithdrawn.call();
+        }).then(function (state) {
+            assert.isFalse(state, 'withdrawal state is set to false');
+            return token.withdrawLocked({from: owner});
+        }).then(function () {
+            return token.balanceOf.call(0);
+        }).then(function (balance) {
+            zBalanceAfter = balance;
+            assert.isTrue(zBalanceBefore.eq(zBalanceAfter), 'zero address balance remained unchanged');
+            return token.balanceOf.call(owner);
+        }).then(function (balance) {
+            oBalanceAfter = balance;
+            assert.isTrue(oBalanceBefore.eq(oBalanceAfter), 'owner balance remained unchanged');
+            return token.teamLockWithdrawn.call();
+        }).then(function (state) {
+            assert.isFalse(state, 'withdrawal state is still set to false');
+        });
+    });
+
+    it('should prevent non-owner from withdrawing locked team amount after lock duration passes', function () {
+        var zBalanceBefore, zBalanceAfter, oBalanceBefore, oBalanceAfter, startTime, tLockDuration, lockEndsAt, nonOwner = accounts[2];
+
+        return token.startTime.call().then(function (_startTime) {
+            startTime = _startTime;
+            return token.teamLockDuration.call();
+        }).then(function (_teamLockDuration) {
+            tLockDuration = _teamLockDuration;
+            lockEndsAt = startTime.add(tLockDuration);
+            return advanceTime(lockEndsAt);
+        }).then(function (currentTime) {
+            assert.isTrue(currentTime.gte(lockEndsAt), 'lock end time had passed');
+            return token.balanceOf.call(0);
+        }).then(function (balance) {
+            zBalanceBefore = balance;
+            return token.balanceOf.call(owner);
+        }).then(function (balance) {
+            oBalanceBefore = balance;
+            return token.teamLockWithdrawn.call();
+        }).then(function (state) {
+            assert.isFalse(state, 'withdrawal state is set to false');
+            assert.notEqual(owner, nonOwner, 'the account making the transaction is not an owner');
+            return token.withdrawLocked({from: nonOwner}).catch(function () { });
+        }).then(function () {
+            return token.teamLockWithdrawn.call();
+        }).then(function (state) {
+            assert.isFalse(state, 'withdrawal state is still set to false');
+            return token.balanceOf.call(0);
+        }).then(function (balance) {
+            zBalanceAfter = balance;
+            assert.isTrue(zBalanceBefore.eq(zBalanceAfter), 'zero address balance remained unchanged');
+            return token.balanceOf.call(owner);
+        }).then(function (balance) {
+            oBalanceAfter = balance;
+            assert.isTrue(oBalanceBefore.eq(oBalanceAfter), 'owner balance remained unchanged');
+        });
+    });
+
+    it('should allow owner to withdraw locked team amount after lock duration passes', function () {
+        var zBalanceBefore, zBalanceAfter, oBalanceBefore, oBalanceAfter, startTime, tLockDuration, lockEndsAt, amount;
+
+        return token.startTime.call().then(function (_startTime) {
+            startTime = _startTime;
+            return token.teamLockDuration.call();
+        }).then(function (_teamLockDuration) {
+            tLockDuration = _teamLockDuration;
+            lockEndsAt = startTime.add(tLockDuration);
+            return getTime();
+        }).then(function (currentTime) {
+            assert.isTrue(currentTime.gte(lockEndsAt), 'lock end time had passed');
+            return token.balanceOf.call(0);
+        }).then(function (balance) {
+            zBalanceBefore = balance;
+            return token.balanceOf.call(owner);
+        }).then(function (balance) {
+            oBalanceBefore = balance;
+            return token.teamLockAmount.call();
+        }).then(function (_amount) {
+            amount = _amount;
+            assert.isTrue(amount.gt(0), 'locked amount is greater than 0');
+            return token.teamLockWithdrawn.call();
+        }).then(function (state) {
+            assert.isFalse(state, 'withdrawal state is set to false');
+            return token.withdrawLocked({from: owner});
+        }).then(function () {
+            return token.teamLockWithdrawn.call();
+        }).then(function (state) {
+            assert.isTrue(state, 'withdrawal state is set to true');
+            return token.balanceOf.call(0);
+        }).then(function (balance) {
+            zBalanceAfter = balance;
+            assert.isTrue(zBalanceBefore.sub(amount).eq(zBalanceAfter), 'zero address balance was reduced by the locked amount');
+            return token.balanceOf.call(owner);
+        }).then(function (balance) {
+            oBalanceAfter = balance;
+            assert.isTrue(oBalanceBefore.add(amount).eq(oBalanceAfter), 'owner balance was increased by the locked amount');
+
+            // Attempt to repeat the withdrawal
+            zBalanceBefore = zBalanceAfter;
+            oBalanceBefore = oBalanceAfter;
+            zBalanceAfter = null;
+            oBalanceAfter = null;
+            return token.withdrawLocked({from: owner});
+        }).then(function () {
+            return token.balanceOf.call(0);
+        }).then(function (balance) {
+            zBalanceAfter = balance;
+            assert.isTrue(zBalanceBefore.eq(zBalanceAfter), 'zero address balance remained unchanged');
+            return token.balanceOf.call(owner);
+        }).then(function (balance) {
+            oBalanceAfter = balance;
+            assert.isTrue(oBalanceBefore.eq(oBalanceAfter), 'owner balance remained unchanged');
+        });
+    });
 
     it('should prevent ownership transfers for non-owners', function () {
-        var currentOwner, newOwner = accounts[3], notOwner = accounts[4], lockReleaseTime;
+        var currentOwner, newOwner = accounts[3], notOwner = accounts[4], startTime;
 
         return token.owner.call().then(function (_owner) {
             currentOwner = _owner;
             assert.notEqual(currentOwner, newOwner);
-            return token.lockReleaseTime.call();
-        }).then(function (_lockReleaseTime) {
-            lockReleaseTime = _lockReleaseTime;
+            return token.startTime.call();
+        }).then(function (_startTime) {
+            startTime = _startTime;
             return getTime();
         }).then(function (currentTime) {
-            assert.isTrue(currentTime.gte(lockReleaseTime), 'lock release time had passed');
+            assert.isTrue(currentTime.gte(startTime), 'start time had passed');
             assert.notEqual(notOwner, currentOwner, 'the new owner address does not match current owner address');
             return token.transferOwnership(newOwner, {from: notOwner}).catch(function () { });
         }).then(function () {
@@ -435,17 +680,17 @@ contract('BitDegreeToken', function (accounts) {
         });
     });
 
-    it('should allow ownership transfers after token lock is released', function () {
-        var currentOwner, newOwner = accounts[3], lockReleaseTime;
+    it('should allow ownership transfers after token start time', function () {
+        var currentOwner, newOwner = accounts[3], startTime;
         return token.owner.call().then(function (_owner) {
             currentOwner = _owner;
             assert.notEqual(currentOwner, newOwner, 'new owner does not match the current owner');
-            return token.lockReleaseTime.call();
-        }).then(function (_lockReleaseTime) {
-            lockReleaseTime = _lockReleaseTime;
+            return token.startTime.call();
+        }).then(function (_startTime) {
+            startTime = _startTime;
             return getTime();
         }).then(function (currentTime) {
-            assert.isTrue(currentTime.gte(lockReleaseTime), 'lock release time had passed');
+            assert.isTrue(currentTime.gte(startTime), 'start time time had passed');
             return token.transferOwnership(newOwner, {from: owner});
         }).then(function () {
             return token.owner.call();
@@ -755,7 +1000,7 @@ contract('BitDegreeCrowdsale', function (accounts) {
             hardCap = _hardCap;
             assert.isTrue(tokensSold.lt(hardCap), 'not all tokens are sold');
             toSpend = hardCap.sub(tokensSold).div(rate);
-            return ico.buyTokens(accounts[1], {from: accounts[1], value: toSpend.toFixed()});
+            return ico.buyTokens(accounts[1], {from: accounts[1], value: toSpend});
         }).then(function () {
             return token.startTime.call();
         }).then(function (startTime) {

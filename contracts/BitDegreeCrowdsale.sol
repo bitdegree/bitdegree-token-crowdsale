@@ -64,10 +64,10 @@ contract BitDegreeCrowdsale {
     uint256 public tokensSold;
 
     // Soft cap in BDG tokens
-    uint256 constant public softCap = 191250000 * (10**18);
+    uint256 constant public softCap = 6250000 * (10**18);
 
     // Hard cap in BDG tokens
-    uint256 constant public hardCap = 765000000 * (10**18);
+    uint256 constant public hardCap = 336600000 * (10**18);
 
     // Switched to true once token contract is notified of when to enable token transfers
     bool private isStartTimeSet = false;
