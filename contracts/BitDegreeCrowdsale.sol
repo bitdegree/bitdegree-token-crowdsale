@@ -57,9 +57,6 @@ contract BitDegreeCrowdsale {
     // Address where funds are collected
     address public wallet;
 
-    // How many token units a buyer gets per wei
-    uint256 public rate;
-
     // Amount of tokens that were sold
     uint256 public tokensSold;
 
@@ -96,22 +93,19 @@ contract BitDegreeCrowdsale {
     /**
      * @param _startTime Unix timestamp for the start of the token sale
      * @param _endTime Unix timestamp for the end of the token sale
-     * @param _rate Rate that is used after pre-sale
      * @param _wallet Ethereum address to which the invested funds are forwarded
      * @param _token Address of the token that will be rewarded for the investors
      * @param _owner Address of the owner of the smart contract who can execute restricted functions
      */
-    function BitDegreeCrowdsale(uint256 _startTime, uint256 _endTime, uint256 _rate, address _wallet, address _token, address _owner) {
+    function BitDegreeCrowdsale(uint256 _startTime, uint256 _endTime, address _wallet, address _token, address _owner) {
         require(_startTime >= now);
         require(_endTime >= _startTime);
-        require(_rate >= 10000 && _rate <= 12500);
         require(_wallet != address(0));
         require(_token != address(0));
         require(_owner != address(0));
 
         startTime = _startTime;
         endTime = _endTime;
-        rate = _rate;
         wallet = _wallet;
         owner = _owner;
         reward = token(_token);
@@ -146,6 +140,9 @@ contract BitDegreeCrowdsale {
 
         uint256 weiAmount = msg.value;
         uint256 returnToSender = 0;
+
+        // Retrieve the current token rate
+        uint256 rate = getRate();
 
         // Calculate token amount to be transferred
         uint256 tokens = weiAmount.mul(rate);
@@ -187,12 +184,23 @@ contract BitDegreeCrowdsale {
     }
 
     /**
-     * @dev The function that allows the owner to change the token price
-     * @param _newRate The new rate that should be used
+     * @dev Internal function that is used to determine the current rate for token / ETH conversion
+     * @return The current token rate
      */
-    function setRate(uint256 _newRate) external onlyOwner {
-        require(_newRate >= 10000 && _newRate <= 12500);
-        rate = _newRate;
+    function getRate() internal constant returns (uint256) {
+        if(now < (startTime + 1 weeks)) {
+            return 11500;
+        }
+
+        if(now < (startTime + 2 weeks)) {
+            return 11000;
+        }
+
+        if(now < (startTime + 3 weeks)) {
+            return 10500;
+        }
+
+        return 10000;
     }
 
     /**

@@ -730,12 +730,12 @@ contract('BitDegreeToken', function (accounts) {
 });
 
 contract('BitDegreeCrowdsale', function (accounts) {
-    var token, ico, rate = 10000, owner = accounts[0], wallet = accounts[9], startTime, endTime, softCap, hardCap;
+    var token, ico, owner = accounts[0], wallet = accounts[9], startTime, endTime, softCap;
 
     function resetContracts(cb) {
         advanceTime(1000).then(function (time) {
             startTime = time.add(1000);
-            endTime = startTime.add(1000);
+            endTime = startTime.add(3600 * 24 * 30);
             return BitDegreeToken.new();
         }).then(function (instance) {
             token = instance;
@@ -744,7 +744,6 @@ contract('BitDegreeCrowdsale', function (accounts) {
             return BitDegreeCrowdsale.new(
                 startTime,
                 endTime,
-                rate,
                 wallet, // destination wallet
                 token.address, // deployed contract
                 _owner
@@ -773,11 +772,6 @@ contract('BitDegreeCrowdsale', function (accounts) {
         }).then(function(_endTime){
             endTime = _endTime;
             assert.isTrue(endTime.gt(startTime), 'end time is after start time');
-            return ico.rate.call();
-        }).then(function(_rate){
-            rate = _rate;
-            assert.isTrue(rate.gte(10000), 'rate is at least 10k');
-            assert.isTrue(rate.lte(12500), 'rate is at most 12.5k');
             return ico.owner.call();
         }).then(function(_owner){
             assert.equal(owner, _owner, 'owner is set correctly');
@@ -820,7 +814,7 @@ contract('BitDegreeCrowdsale', function (accounts) {
     });
 
     it('should accept investments and correctly distribute tokens', function () {
-        var balanceBefore, balanceAfter, tokensBefore, tokensAfter, soldBefore, soldAfter, startTimeBefore, startTimeAfter, crowdsaleEndTime, account = accounts[1], amount = new Big(500);
+        var balanceBefore, balanceAfter, tokensBefore, tokensAfter, soldBefore, soldAfter, startTimeBefore, startTimeAfter, crowdsaleEndTime, rate, account = accounts[1], amount = new Big(500);
 
         return ico.balanceOf.call(account).then(function (balance) {
             balanceBefore = balance;
@@ -848,6 +842,9 @@ contract('BitDegreeCrowdsale', function (accounts) {
         }).then(function (balance) {
             balanceAfter = balance;
             assert.isTrue(balanceAfter.eq(balanceBefore.add(amount)), 'balance was increased correctly');
+            return getRate();
+        }).then(function (_rate) {
+            rate = _rate;
             return ico.tokensSold.call();
         }).then(function (balance) {
             soldAfter = balance;
@@ -859,58 +856,8 @@ contract('BitDegreeCrowdsale', function (accounts) {
         });
     });
 
-    it('should prevent the owner from using too high or too low token rates', function () {
-        var rateBefore, minValue = new Big(10000), maxValue = new Big(12500);
-
-        return ico.rate.call().then(function (rate) {
-            rateBefore = rate;
-            assert.isTrue(rate.gte(minValue), 'rate is greater than or equal to min value');
-            assert.isTrue(rate.lte(maxValue), 'rate is lower than or equal to max value');
-            return ico.setRate(minValue.sub(1), {from: owner}).catch(function () {});
-        }).then(function () {
-            return ico.rate.call();
-        }, function (rate) {
-            assert.isTrue(rate.eq(rateBefore), 'rate remained unchanged');
-            return ico.setRate(maxValue+1, {from: owner}).catch(function () {});
-        }, function () {
-            return ico.rate.call();
-        }, function (rate) {
-            assert.isTrue(rate.eq(rateBefore), 'rate remained unchanged');
-        })
-    });
-
-    it('should allow the owner to change the token rate', function () {
-        var rateBefore, newRate = rate.add(1000);
-
-        return ico.rate.call().then(function (rate) {
-            rateBefore = rate;
-            assert.isFalse(rateBefore.eq(newRate), 'new rate is not the same as existing rate');
-            return ico.setRate(newRate, {from: owner});
-        }).then(function () {
-            return ico.rate.call();
-        }).then(function (rateAfter) {
-            assert.isTrue(rateAfter.eq(newRate), 'new rate was set');
-            assert.isFalse(rateBefore.eq(rateAfter), 'rate was changed compared to previous rate');
-            return ico.setRate(rateBefore, {from: owner}); // return to old rate @todo ?
-        });
-    });
-
-    it('should prevent non-owners from changing the token rate', function () {
-        var rateBefore, newRate = rate.add(1500), account = accounts[1];
-
-        return ico.rate.call().then(function (rate) {
-            rateBefore = rate;
-            assert.notEqual(account, owner, 'the calling account is not an owner');
-            return ico.setRate(newRate, {from: account}).catch(function(){});
-        }).then(function () {
-            return ico.rate.call();
-        }).then(function (rateAfter) {
-            assert.isTrue(rateAfter.eq(rateBefore), 'rate remained unchanged');
-        });
-    });
-
     it('should accept investments for third party beneficiaries and correctly distribute their tokens', function () {
-        var balanceBefore, balanceAfter, tokensBefore, tokensAfter, soldBefore, soldAfter, startTimeBefore, startTimeAfter, account = accounts[1], beneficiary = accounts[2], amount = new Big(30);
+        var balanceBefore, balanceAfter, tokensBefore, tokensAfter, soldBefore, soldAfter, startTimeBefore, startTimeAfter, rate, account = accounts[1], beneficiary = accounts[2], amount = new Big(30);
 
         return ico.balanceOf.call(beneficiary).then(function (balance) {
             balanceBefore = balance;
@@ -926,6 +873,9 @@ contract('BitDegreeCrowdsale', function (accounts) {
             tokensBefore = balance;
             return ico.buyTokens(beneficiary, {from: account, value: amount});
         }).then(function () {
+            return getRate();
+        }).then(function (_rate) {
+            rate = _rate;
             return ico.balanceOf.call(beneficiary);
         }).then(function (balance) {
             balanceAfter = balance;
@@ -946,7 +896,7 @@ contract('BitDegreeCrowdsale', function (accounts) {
     });
 
     it('should should accept investments through the fallback function', function () {
-        var balanceBefore, balanceAfter, tokensBefore, tokensAfter, soldBefore, soldAfter, account = accounts[1], amount = web3.toWei(1, "ether");
+        var balanceBefore, balanceAfter, tokensBefore, tokensAfter, soldBefore, soldAfter, rate, account = accounts[1], amount = web3.toWei(1, "ether");
 
         return ico.balanceOf.call(account).then(function (balance) {
             balanceBefore = balance;
@@ -958,6 +908,9 @@ contract('BitDegreeCrowdsale', function (accounts) {
             tokensBefore = balance;
             return ico.sendTransaction({from: account, value: amount});
         }).then(function () {
+            return getRate();
+        }).then(function (_rate) {
+            rate = _rate;
             return ico.balanceOf.call(account);
         }).then(function (balance) {
             balanceAfter = balance;
@@ -988,40 +941,144 @@ contract('BitDegreeCrowdsale', function (accounts) {
         });
     });
 
-    it('should be possible to reach hard cap', function () {
-        var tokensSold, hardCap, toSpend, startTimeBefore, startTimeAfter;
-        return token.startTime.call().then(function (startTime) {
-            startTimeBefore = startTime;
-            return ico.tokensSold.call();
-        }).then(function (_sold) {
-            tokensSold = _sold;
-            return ico.hardCap.call();
-        }).then(function (_hardCap) {
-            hardCap = _hardCap;
-            assert.isTrue(tokensSold.lt(hardCap), 'not all tokens are sold');
-            toSpend = hardCap.sub(tokensSold).div(rate);
-            return ico.buyTokens(accounts[1], {from: accounts[1], value: toSpend});
-        }).then(function () {
-            return token.startTime.call();
-        }).then(function (startTime) {
-            startTimeAfter = startTime;
-            assert.isTrue(startTimeAfter.lt(startTimeBefore), 'start time was reduced');
-            return ico.tokensSold.call();
-        }).then(function (sold) {
-            // check if exactly the maximum number of public tokens was sold
-            assert.isTrue(sold.eq(hardCap), 'exactly hard cap was sold');
+    it('should be possible to reach hard cap and rate should decrease every week by 5%', function (cb) {
+        var tokensSoldBefore, tokensSoldAfter, hardCap, rate, toSpend, tokenStartBefore, tokenStartAfter, icoStart, currentTime;
+        resetContracts(function () {
+            return token.startTime.call().then(function (startTime) {
+                tokenStartBefore = startTime;
+                return ico.startTime.call();
+            }).then(function(_startTime) {
+                icoStart = _startTime;
+                return advanceTime(startTime);
+            }).then(function (_currentTime) {
+                currentTime = _currentTime;
+                return ico.hardCap.call();
+            }).then(function (_hardCap) {
+                hardCap = _hardCap;
+                return ico.tokensSold.call();
+            }).then(function (_sold) {
+                tokensSoldBefore = _sold;
+                assert.isTrue(tokensSoldBefore.eq(0), 'no tokens are sold');
+                return getRate();
+            }).then(function (_rate) {
+                rate = _rate;
+
+                // -- Week 1 -- 15% bonus
+
+                assert.isTrue(currentTime.lt(startTime.add(3600 * 24 * 7)), 'week 1 had not passed yet');
+                assert.isTrue(rate.eq(11500), 'on week 1 rate is equal to 11500');
+
+                toSpend = 10000;
+                return ico.buyTokens(accounts[1], {from: accounts[1], value: toSpend});
+            }).then(function () {
+                return ico.tokensSold.call();
+            }).then(function (sold) {
+                tokensSoldAfter = sold;
+                assert.isTrue(tokensSoldBefore.add(rate.mul(toSpend)).eq(tokensSoldAfter), 'correct amount of tokens were sold');
+
+                // -- Week 1 -- end
+
+                return advanceTime(startTime.add(3600 * 24 * 7));
+            }).then(function (_currentTime) {
+                currentTime = _currentTime;
+                return getRate();
+            }).then(function (_rate) {
+                rate = _rate;
+
+                tokensSoldBefore = tokensSoldAfter;
+                tokensSoldAfter = null;
+
+                // -- Week 2 -- 10% bonus
+
+                assert.isTrue(currentTime.lt(startTime.add(3600 * 24 * 7 * 2)), 'week 2 started');
+                assert.isTrue(currentTime.gte(startTime.add(3600 * 24 * 7)), 'week 1 ended');
+                assert.isTrue(rate.eq(11000), 'on week 2 rate is equal to 11000');
+
+                toSpend = 10000;
+                return ico.buyTokens(accounts[1], {from: accounts[1], value: toSpend});
+            }).then(function () {
+                return ico.tokensSold.call();
+            }).then(function (sold) {
+                tokensSoldAfter = sold;
+                assert.isTrue(tokensSoldBefore.add(rate.mul(toSpend)).eq(tokensSoldAfter), 'correct amount of tokens were sold');
+
+                // -- Week 2 -- end
+
+                return advanceTime(startTime.add(3600 * 24 * 7 * 2));
+            }).then(function (_currentTime) {
+                currentTime = _currentTime;
+                return getRate();
+            }).then(function (_rate) {
+                rate = _rate;
+
+                tokensSoldBefore = tokensSoldAfter;
+                tokensSoldAfter = null;
+
+                // -- Week 3 -- 5% bonus
+
+                assert.isTrue(currentTime.lt(startTime.add(3600 * 24 * 7 * 3)), 'week 3 started');
+                assert.isTrue(currentTime.gte(startTime.add(3600 * 24 * 7 * 2)), 'week 2 ended');
+                assert.isTrue(rate.eq(10500), 'on week 3 rate is equal to 10500');
+
+                toSpend = 10000;
+                return ico.buyTokens(accounts[1], {from: accounts[1], value: toSpend});
+            }).then(function () {
+                return ico.tokensSold.call();
+            }).then(function (sold) {
+                tokensSoldAfter = sold;
+                assert.isTrue(tokensSoldBefore.add(rate.mul(toSpend)).eq(tokensSoldAfter), 'correct amount of tokens were sold');
+
+                // -- Week 3 -- end
+
+                return advanceTime(startTime.add(3600 * 24 * 7 * 3));
+            }).then(function (_currentTime) {
+                currentTime = _currentTime;
+                return getRate();
+            }).then(function (_rate) {
+                rate = _rate;
+
+                tokensSoldBefore = tokensSoldAfter;
+                tokensSoldAfter = null;
+
+                // -- Week 4 -- 0% bonus
+
+                assert.isTrue(currentTime.lt(startTime.add(3600 * 24 * 7 * 4)), 'week 4 started');
+                assert.isTrue(currentTime.gte(startTime.add(3600 * 24 * 7 * 3)), 'week 3 ended');
+                assert.isTrue(rate.eq(10000), 'after week 4 rate is equal to 10000');
+
+                toSpend = hardCap.sub(tokensSoldBefore).div(rate);
+                return ico.buyTokens(accounts[1], {from: accounts[1], value: toSpend});
+            }).then(function () {
+                return ico.tokensSold.call();
+            }).then(function (sold) {
+                tokensSoldAfter = sold;
+
+                assert.isTrue(tokensSoldBefore.add(rate.mul(toSpend)).eq(tokensSoldAfter), 'correct amount of tokens were sold');
+                assert.isTrue(tokensSoldAfter.eq(hardCap), 'exactly hard cap was sold');
+
+                // -- Week 4 -- end
+
+                return token.startTime.call();
+            }).then(function (_startTime) {
+                tokenStartAfter = _startTime;
+                assert.isTrue(tokenStartAfter.lt(tokenStartBefore), 'token transfer start time was switched to an earlier timestamp');
+                cb();
+            });
         });
     });
 
     it('should not be possible to transfer funds after crowdsale end time had passed and soft cap was reached', function (cb) {
         // Reset the contracts
         resetContracts(function () {
-            var soldBefore, soldAfter, account = accounts[2], softCapPrice;
+            var soldBefore, soldAfter, rate, account = accounts[2], softCapPrice;
 
             // Set the crowdsale address first
             ico.startTime.call().then(function () {
-                return advanceTime(startTime);
+                return advanceTime(startTime.add(3600 * 25 * 7 * 3)); // fast forward to week 4 to have 10000 rate
             }).then(function () {
+                return getRate();
+            }).then(function (_rate) {
+                rate = _rate;
                 return ico.softCap.call();
             }).then(function (_softCap) {
                 softCap = _softCap;
@@ -1071,13 +1128,13 @@ contract('BitDegreeCrowdsale', function (accounts) {
             ico.startTime.call().then(function () {
                 return advanceTime(startTime);
             }).then(function () {
-                return ico.rate.call();
+                return getRate();
             }).then(function (_rate) {
                 rate = _rate;
                 return ico.softCap.call();
             }).then(function (_softCap) {
                 softCap = _softCap;
-                transferAmount = softCap.sub(rate.mul(2)).div(rate);
+                transferAmount = softCap.sub(rate.mul(2)).div(rate).floor();
                 return ico.buyTokens(account, {from: account, value: transferAmount});
             }).then(function () {
                 return ico.buyTokens(account, {from: account2, value: 1}); // buy from 2 accounts, used in further tests
@@ -1152,7 +1209,7 @@ contract('BitDegreeCrowdsale', function (accounts) {
     it('should return excess ether to the buyer if their contribution exceeds the hard cap', function (cb) {
         resetContracts(function () {
             var transferAmount, soldBefore, soldAfter, walletBefore, walletAfter, accountBalanceBefore, accountBalanceAfter, tokensBefore, tokensAfter, contributionBefore, contributionAfter, hardCap, hardCapPrice, rate, wallet, startTimeBefore, startTimeAfter;
-            var account = accounts[2], exceedBy = new Big(1500000000);
+            var account = accounts[2], exceedBy = new Big(web3.toWei('30000', 'mether'));
 
             token.startTime.call().then(function (startTime) {
                 startTimeBefore = startTime;
@@ -1162,14 +1219,15 @@ contract('BitDegreeCrowdsale', function (accounts) {
                 return ico.wallet.call();
             }).then(function (_wallet) {
                 wallet = _wallet;
-                return ico.rate.call();
+                return getRate();
             }).then(function (_rate) {
                 rate = _rate;
                 return ico.startTime.call();
             }).then(function (startTime) {
-                transferAmount = hardCap.add(exceedBy);
+                hardCapPrice = hardCap.divToInt(rate);
+                transferAmount = hardCapPrice.add(exceedBy);
                 assert.isTrue(exceedBy.gt(0), 'exceed number is greater than 0');
-                assert.isTrue(transferAmount.gt(hardCap), 'hard cap will actually be exceeded');
+                assert.isTrue(transferAmount.gt(hardCapPrice), 'hard cap will actually be exceeded');
                 return advanceTime(startTime.add(500));
             }).then(function () {
                 return ico.balanceOf.call(account);
@@ -1200,8 +1258,7 @@ contract('BitDegreeCrowdsale', function (accounts) {
                 return ico.balanceOf.call(account);
             }).then(function (balance) {
                 contributionAfter = balance;
-                hardCapPrice = hardCap.div(rate);
-                assert.isTrue(contributionBefore.add(hardCapPrice).eq(contributionAfter), 'only the hard cap worth of wei was counted in balances mapping');
+                assert.isTrue(hardCapPrice.eq(contributionAfter), 'only the hard cap worth of wei was counted in balances mapping');
                 return ico.tokensSold.call();
             }).then(function (_tokensSold) {
                 soldAfter = _tokensSold;
@@ -1223,6 +1280,27 @@ contract('BitDegreeCrowdsale', function (accounts) {
         });
     });
 
+    function getRate() {
+        var startTime;
+        return ico.startTime.call().then(function (_startTime) {
+            startTime = _startTime;
+            return getTime();
+        }).then(function (currentTime) {
+            var week = 1, bonus = 15, base = new Big('10000');
+            while(true) {
+                if(currentTime.lt(startTime.add(week * 3600 * 24 * 7))) {
+                    return base.mul((1 + bonus / 100).toFixed(2));
+                }
+
+                week++;
+                bonus -= 5;
+
+                if(bonus === 0) {
+                    return base;
+                }
+            }
+        })
+    }
 });
 
 
