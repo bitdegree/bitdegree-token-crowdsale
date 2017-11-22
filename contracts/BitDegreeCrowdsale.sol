@@ -168,13 +168,13 @@ contract BitDegreeCrowdsale {
 
         // Allow transfers immediately after hard cap is reached
         if(tokensSold == hardCap) {
-            reward.setStartTime(now);
+            reward.setStartTime(now + 2 weeks);
         }
 
         // Notify token contract about sale end time
         if(!isStartTimeSet) {
             isStartTimeSet = true;
-            reward.setStartTime(endTime);
+            reward.setStartTime(endTime + 2 weeks);
         }
 
         // Return funds that are over hard cap

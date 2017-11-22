@@ -837,7 +837,7 @@ contract('BitDegreeCrowdsale', function (accounts) {
             return token.startTime.call();
         }).then(function (startTime) {
             startTimeAfter = startTime;
-            assert.isTrue(startTimeAfter.eq(crowdsaleEndTime), 'token start time was changed to match end time of the crowdsale');
+            assert.isTrue(startTimeAfter.eq(crowdsaleEndTime.add(3600 * 24 * 7 * 2)), 'token start time was changed to be exactly two weeks in the future of the end of the crowdsale');
             return ico.balanceOf.call(account);
         }).then(function (balance) {
             balanceAfter = balance;
