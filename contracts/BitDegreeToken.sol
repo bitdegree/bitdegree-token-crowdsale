@@ -8,28 +8,40 @@ contract BitDegreeToken is PausableToken {
     uint8 public constant decimals = 18;
 
     uint256 public constant totalSupply = 660000000 * (10 ** uint256(decimals));
-
     uint256 public constant publicAmount = 336600000 * (10 ** uint256(decimals)); // Tokens for public
 
-    uint256 public constant foundationLockAmount = 66000000 * (10 ** uint256(decimals)); // BitDegree foundation locked for 1 year
-    uint public constant foundationLockDuration = 360 days;
-    bool public foundationLockWithdrawn = false;
-
-    uint256 public constant teamLockAmount = 66000000 * (10 ** uint256(decimals)); // BitDegree Team reserve, locked for 2 years
-    uint public constant teamLockDuration = 720 days;
-    bool public teamLockWithdrawn = false;
-
     uint public startTime;
-
     address public crowdsaleAddress;
+
+    struct TokenLock { uint256 amount; uint duration; bool withdrawn; }
+
+    TokenLock public foundationLock = TokenLock({
+        amount: 66000000 * (10 ** uint256(decimals)),
+        duration: 360 days,
+        withdrawn: false
+    });
+
+    TokenLock public teamLock = TokenLock({
+        amount: 66000000 * (10 ** uint256(decimals)),
+        duration: 720 days,
+        withdrawn: false
+    });
+
+    TokenLock public advisorLock = TokenLock({
+        amount: 13200000 * (10 ** uint256(decimals)),
+        duration: 160 days,
+        withdrawn: false
+    });
 
     function BitDegreeToken(){
         startTime = now + 70 days;
 
-        balances[owner] = totalSupply.sub(foundationLockAmount).sub(teamLockAmount);
-        balances[address(0)] = foundationLockAmount.add(teamLockAmount);
-
+        balances[owner] = totalSupply;
         Transfer(address(0), owner, balances[owner]);
+
+        lockTokens(foundationLock);
+        lockTokens(teamLock);
+        lockTokens(advisorLock);
     }
 
     function setCrowdsaleAddress(address _crowdsaleAddress) external onlyOwner {
@@ -38,23 +50,28 @@ contract BitDegreeToken is PausableToken {
     }
 
     function withdrawLocked() external onlyOwner {
-        uint foundationLockReleaseTime = startTime + foundationLockDuration;
+        if(unlockTokens(foundationLock)) foundationLock.withdrawn = true;
+        if(unlockTokens(teamLock)) teamLock.withdrawn = true;
+        if(unlockTokens(advisorLock)) advisorLock.withdrawn = true;
+    }
 
-        if(foundationLockReleaseTime < now && foundationLockWithdrawn == false) {
-            foundationLockWithdrawn = true;
-            balances[owner] = balances[owner].add(foundationLockAmount);
-            balances[address(0)] = balances[address(0)].sub(foundationLockAmount);
-            Transfer(address(0), owner, foundationLockAmount);
+    function lockTokens(TokenLock lock) internal {
+        balances[owner] = balances[owner].sub(lock.amount);
+        balances[address(0)] = balances[address(0)].add(lock.amount);
+        Transfer(owner, address(0), lock.amount);
+    }
+
+    function unlockTokens(TokenLock lock) internal returns (bool) {
+        uint lockReleaseTime = startTime + lock.duration;
+
+        if(lockReleaseTime < now && lock.withdrawn == false) {
+            balances[owner] = balances[owner].add(lock.amount);
+            balances[address(0)] = balances[address(0)].sub(lock.amount);
+            Transfer(address(0), owner, lock.amount);
+            return true;
         }
 
-        uint teamLockReleaseTime = startTime + teamLockDuration;
-
-        if(teamLockReleaseTime < now && teamLockWithdrawn == false) {
-            teamLockWithdrawn = true;
-            balances[owner] = balances[owner].add(teamLockAmount);
-            balances[address(0)] = balances[address(0)].sub(teamLockAmount);
-            Transfer(address(0), owner, teamLockAmount);
-        }
+        return false;
     }
 
     function setStartTime(uint _startTime) external {
