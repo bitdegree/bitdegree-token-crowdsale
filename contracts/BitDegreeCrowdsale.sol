@@ -32,6 +32,7 @@ library SafeMath {
 
 contract token {
     function transferFrom(address from, address to, uint256 value) returns (bool);
+    function setStartTime(uint _startTime);
 }
 
 /**
@@ -56,20 +57,17 @@ contract BitDegreeCrowdsale {
     // Address where funds are collected
     address public wallet;
 
-    // How many token units a buyer gets per wei
-    uint256 public rate;
+    // Amount of tokens that were sold
+    uint256 public tokensSold;
 
-    // Amount of raised money in wei
-    uint256 public weiRaised;
+    // Soft cap in BDG tokens
+    uint256 constant public softCap = 6250000 * (10**18);
 
-    // Soft cap in wei
-    uint256 constant public softCap = 6500 * 1 ether;
+    // Hard cap in BDG tokens
+    uint256 constant public hardCap = 336600000 * (10**18);
 
-    // Hard cap in wei
-    uint256 constant public hardCap = 76500 * 1 ether;
-
-    // Will be switched to true once crowdsale ends
-    bool public isFinalized = false;
+    // Switched to true once token contract is notified of when to enable token transfers
+    bool private isStartTimeSet = false;
 
     /**
      * @dev Event for token purchase logging
@@ -88,29 +86,21 @@ contract BitDegreeCrowdsale {
     event Refund(address indexed receiver, uint256 amount);
 
     /**
-     * @dev Event that is emitted when crowdsale gets finalized
-     */
-    event Finalized();
-
-    /**
      * @param _startTime Unix timestamp for the start of the token sale
      * @param _endTime Unix timestamp for the end of the token sale
-     * @param _rate Rate that is used after pre-sale
      * @param _wallet Ethereum address to which the invested funds are forwarded
      * @param _token Address of the token that will be rewarded for the investors
      * @param _owner Address of the owner of the smart contract who can execute restricted functions
      */
-    function BitDegreeCrowdsale(uint256 _startTime, uint256 _endTime, uint256 _rate, address _wallet, address _token, address _owner) {
+    function BitDegreeCrowdsale(uint256 _startTime, uint256 _endTime, address _wallet, address _token, address _owner) {
         require(_startTime >= now);
         require(_endTime >= _startTime);
-        require(_rate > 0);
         require(_wallet != address(0));
         require(_token != address(0));
         require(_owner != address(0));
 
         startTime = _startTime;
         endTime = _endTime;
-        rate = _rate;
         wallet = _wallet;
         owner = _owner;
         reward = token(_token);
@@ -128,8 +118,11 @@ contract BitDegreeCrowdsale {
      * @dev Fallback function that can be used to buy tokens. Or in case of the owner, return ether to allow refunds.
      */
     function () external payable {
-        if(msg.sender != wallet)
+        if(msg.sender == wallet) {
+            require(hasEnded() && tokensSold < softCap);
+        } else {
             buyTokens(msg.sender);
+        }
     }
 
     /**
@@ -141,12 +134,23 @@ contract BitDegreeCrowdsale {
         require(validPurchase());
 
         uint256 weiAmount = msg.value;
+        uint256 returnToSender = 0;
 
-        // calculate token amount to be transferred
+        // Retrieve the current token rate
+        uint256 rate = getRate();
+
+        // Calculate token amount to be transferred
         uint256 tokens = weiAmount.mul(rate);
 
+        // Distribute only the remaining tokens if final contribution exceeds hard cap
+        if(tokensSold.add(tokens) > hardCap) {
+            tokens = hardCap.sub(tokensSold);
+            weiAmount = tokens.div(rate);
+            returnToSender = msg.value.sub(weiAmount);
+        }
+
         // update state
-        weiRaised = weiRaised.add(weiAmount);
+        tokensSold = tokensSold.add(tokens);
 
         // update balance
         balances[beneficiary] = balances[beneficiary].add(weiAmount);
@@ -155,16 +159,43 @@ contract BitDegreeCrowdsale {
         TokenPurchase(msg.sender, beneficiary, weiAmount, tokens);
 
         // Forward funds
-        wallet.transfer(msg.value);
+        wallet.transfer(weiAmount);
+
+        // Allow transfers immediately after hard cap is reached
+        if(tokensSold == hardCap) {
+            reward.setStartTime(now + 2 weeks);
+        }
+
+        // Notify token contract about sale end time
+        if(!isStartTimeSet) {
+            isStartTimeSet = true;
+            reward.setStartTime(endTime + 2 weeks);
+        }
+
+        // Return funds that are over hard cap
+        if(returnToSender > 0) {
+            msg.sender.transfer(returnToSender);
+        }
     }
 
     /**
-     * @dev The function that allows the owner to change the token price
-     * @param _newRate The new rate that should be used
+     * @dev Internal function that is used to determine the current rate for token / ETH conversion
+     * @return The current token rate
      */
-    function setRate(uint256 _newRate) external onlyOwner {
-        require(_newRate >= 10000 && _newRate <= 100000);
-        rate = _newRate;
+    function getRate() internal constant returns (uint256) {
+        if(now < (startTime + 1 weeks)) {
+            return 11500;
+        }
+
+        if(now < (startTime + 2 weeks)) {
+            return 11000;
+        }
+
+        if(now < (startTime + 3 weeks)) {
+            return 10500;
+        }
+
+        return 10000;
     }
 
     /**
@@ -174,34 +205,23 @@ contract BitDegreeCrowdsale {
     function validPurchase() internal constant returns (bool) {
         bool withinPeriod = now >= startTime && now <= endTime;
         bool nonZeroPurchase = msg.value != 0;
-        bool hardCapNotExceeded = weiRaised.add(msg.value) <= hardCap;
-        return withinPeriod && nonZeroPurchase && hardCapNotExceeded && !isFinalized;
+        bool hardCapNotReached = tokensSold < hardCap;
+        return withinPeriod && nonZeroPurchase && hardCapNotReached;
     }
 
     /**
      * @return True if crowdsale event has ended
      */
     function hasEnded() public constant returns (bool) {
-        return now > endTime;
-    }
-
-    /**
-     * @dev The function that should be called by the owner after the crowdsale ends.
-     */
-    function finalize() external onlyOwner {
-        require(!isFinalized);
-        require(hasEnded() || weiRaised >= hardCap);
-
-        isFinalized = true;
-        Finalized();
+        return now > endTime || tokensSold >= hardCap;
     }
 
     /**
      * @dev Returns ether to token holders in case soft cap is not reached.
      */
     function claimRefund() external {
-        require(isFinalized);
-        require(weiRaised < softCap);
+        require(hasEnded());
+        require(tokensSold < softCap);
 
         uint256 amount = balances[msg.sender];
 

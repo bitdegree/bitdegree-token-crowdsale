@@ -13,6 +13,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "pinkie-promise": "^2.0.1",
     "zeppelin-solidity": "^1.2.0"
   },
   "devDependencies": {

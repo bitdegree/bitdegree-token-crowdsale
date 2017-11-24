@@ -7,22 +7,41 @@ contract BitDegreeToken is PausableToken {
     string public constant symbol = "BDG";
     uint8 public constant decimals = 18;
 
-    uint256 public constant totalSupply = 1500000000 * (10 ** uint256(decimals));
-
-    uint256 public constant publicAmount = 765000000 * (10 ** uint256(decimals)); // Tokens for public
-    uint256 public constant lockedAmount = 150000000 * (10 ** uint256(decimals)); // BitDegree foundation, locked for 160 days
+    uint256 public constant totalSupply = 660000000 * (10 ** uint256(decimals));
+    uint256 public constant publicAmount = 336600000 * (10 ** uint256(decimals)); // Tokens for public
 
     uint public startTime;
-    uint public lockReleaseTime;
-
     address public crowdsaleAddress;
 
-    function BitDegreeToken(uint _startTime){
-        startTime = _startTime;
-        lockReleaseTime = startTime + 160 days;
+    struct TokenLock { uint256 amount; uint duration; bool withdrawn; }
+
+    TokenLock public foundationLock = TokenLock({
+        amount: 66000000 * (10 ** uint256(decimals)),
+        duration: 360 days,
+        withdrawn: false
+    });
+
+    TokenLock public teamLock = TokenLock({
+        amount: 66000000 * (10 ** uint256(decimals)),
+        duration: 720 days,
+        withdrawn: false
+    });
+
+    TokenLock public advisorLock = TokenLock({
+        amount: 13200000 * (10 ** uint256(decimals)),
+        duration: 160 days,
+        withdrawn: false
+    });
+
+    function BitDegreeToken(){
+        startTime = now + 70 days;
 
         balances[owner] = totalSupply;
-        Transfer(address(0), owner, totalSupply);
+        Transfer(address(0), owner, balances[owner]);
+
+        lockTokens(foundationLock);
+        lockTokens(teamLock);
+        lockTokens(advisorLock);
     }
 
     function setCrowdsaleAddress(address _crowdsaleAddress) external onlyOwner {
@@ -30,13 +49,41 @@ contract BitDegreeToken is PausableToken {
         assert(approve(crowdsaleAddress, publicAmount));
     }
 
+    function withdrawLocked() external onlyOwner {
+        if(unlockTokens(foundationLock)) foundationLock.withdrawn = true;
+        if(unlockTokens(teamLock)) teamLock.withdrawn = true;
+        if(unlockTokens(advisorLock)) advisorLock.withdrawn = true;
+    }
+
+    function lockTokens(TokenLock lock) internal {
+        balances[owner] = balances[owner].sub(lock.amount);
+        balances[address(0)] = balances[address(0)].add(lock.amount);
+        Transfer(owner, address(0), lock.amount);
+    }
+
+    function unlockTokens(TokenLock lock) internal returns (bool) {
+        uint lockReleaseTime = startTime + lock.duration;
+
+        if(lockReleaseTime < now && lock.withdrawn == false) {
+            balances[owner] = balances[owner].add(lock.amount);
+            balances[address(0)] = balances[address(0)].sub(lock.amount);
+            Transfer(address(0), owner, lock.amount);
+            return true;
+        }
+
+        return false;
+    }
+
+    function setStartTime(uint _startTime) external {
+        require(msg.sender == crowdsaleAddress);
+        if(_startTime < startTime) {
+            startTime = _startTime;
+        }
+    }
+
     function transfer(address _to, uint _value) public returns (bool) {
         // Only possible after ICO ends
         require(now >= startTime);
-
-        // Owner cannot spend more than lockedAmount until lockReleaseTime had passed
-        if (msg.sender == owner && now < lockReleaseTime)
-            require(balances[msg.sender].sub(_value) >= lockedAmount);
 
         return super.transfer(_to, _value);
     }
@@ -46,15 +93,11 @@ contract BitDegreeToken is PausableToken {
         if (now < startTime)
             require(_from == owner);
 
-        // Owner cannot spend more than lockedAmount until lockReleaseTime had passed
-        if (_from == owner && now < lockReleaseTime)
-            require(balances[_from].sub(_value) >= lockedAmount);
-
         return super.transferFrom(_from, _to, _value);
     }
 
     function transferOwnership(address newOwner) public onlyOwner {
-        require(now >= lockReleaseTime);
+        require(now >= startTime);
         super.transferOwnership(newOwner);
     }
 }
