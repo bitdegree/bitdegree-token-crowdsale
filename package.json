@@ -1,5 +1,5 @@
 {
-  "name": "test-c",
+  "name": "bitdegree-token-crowdsale",
   "version": "1.0.0",
   "description": "",
   "main": "truffle.js",
@@ -14,9 +14,9 @@
   "license": "ISC",
   "dependencies": {
     "pinkie-promise": "^2.0.1",
-    "zeppelin-solidity": "^1.2.0"
+    "zeppelin-solidity": "^1.4.0"
   },
   "devDependencies": {
-    "solidity-coverage": "^0.2.5"
+    "solidity-coverage": "^0.3.5"
   }
 }

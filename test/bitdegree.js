@@ -138,19 +138,6 @@ contract('BitDegreeToken', function (accounts) {
         });
     });
 
-    it('should not allow accounts to change allowance to non-zero value', function () {
-        var newAllowance = 200;
-
-        return token.allowance.call(accounts[1], accounts[2]).then(function (allowance) {
-            assert.isTrue(allowance.gt(0), 'allowance above zero');
-            return token.approve(accounts[2], newAllowance, {from: accounts[1]}).catch(function () {});
-        }).then(function () {
-            return token.allowance.call(accounts[1], accounts[2]);
-        }).then(function (allowance) {
-            assert.isFalse(allowance.eq(newAllowance), 'allowance remained the same');
-        });
-    });
-
     it('should allow accounts to change allowance to zero', function () {
         return token.allowance.call(accounts[1], accounts[2]).then(function (allowance) {
             assert.isFalse(allowance.eq(0), 'allowance is a non-zero value');
@@ -859,7 +846,7 @@ contract('BitDegreeCrowdsale', function (accounts) {
         advanceTime(1000).then(function (time) {
             startTime = time.add(1000);
             endTime = startTime.add(3600 * 24 * 30);
-            return BitDegreeToken.new();
+            return BitDegreeToken.new({gas: 2000000});
         }).then(function (instance) {
             token = instance;
             return token.owner.call();
@@ -869,7 +856,8 @@ contract('BitDegreeCrowdsale', function (accounts) {
                 endTime,
                 wallet, // destination wallet
                 token.address, // deployed contract
-                _owner
+                _owner,
+                {gas: 2000000}
             );
         }).then(function(instance){
             ico = instance;

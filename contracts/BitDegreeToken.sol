@@ -1,4 +1,4 @@
-pragma solidity^0.4.15;
+pragma solidity^0.4.18;
 
 import "zeppelin-solidity/contracts/token/PausableToken.sol";
 
@@ -33,7 +33,7 @@ contract BitDegreeToken is PausableToken {
         withdrawn: false
     });
 
-    function BitDegreeToken(){
+    function BitDegreeToken() public {
         startTime = now + 70 days;
 
         balances[owner] = totalSupply;

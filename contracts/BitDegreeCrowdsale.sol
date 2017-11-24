@@ -1,29 +1,32 @@
-pragma solidity ^0.4.15;
+pragma solidity ^0.4.18;
 
 /**
  * @title SafeMath
  * @dev Math operations with safety checks that throw on error
  */
 library SafeMath {
-    function mul(uint256 a, uint256 b) internal constant returns (uint256) {
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
         uint256 c = a * b;
-        assert(a == 0 || c / a == b);
+        assert(c / a == b);
         return c;
     }
 
-    function div(uint256 a, uint256 b) internal constant returns (uint256) {
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
         // assert(b > 0); // Solidity automatically throws when dividing by 0
         uint256 c = a / b;
         // assert(a == b * c + a % b); // There is no case in which this doesn't hold
         return c;
     }
 
-    function sub(uint256 a, uint256 b) internal constant returns (uint256) {
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
         assert(b <= a);
         return a - b;
     }
 
-    function add(uint256 a, uint256 b) internal constant returns (uint256) {
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
         uint256 c = a + b;
         assert(c >= a);
         return c;
@@ -31,8 +34,8 @@ library SafeMath {
 }
 
 contract token {
-    function transferFrom(address from, address to, uint256 value) returns (bool);
-    function setStartTime(uint _startTime);
+    function transferFrom(address _from, address _to, uint256 _value) public returns (bool);
+    function setStartTime(uint _startTime) external;
 }
 
 /**
@@ -92,7 +95,7 @@ contract BitDegreeCrowdsale {
      * @param _token Address of the token that will be rewarded for the investors
      * @param _owner Address of the owner of the smart contract who can execute restricted functions
      */
-    function BitDegreeCrowdsale(uint256 _startTime, uint256 _endTime, address _wallet, address _token, address _owner) {
+    function BitDegreeCrowdsale(uint256 _startTime, uint256 _endTime, address _wallet, address _token, address _owner)  public {
         require(_startTime >= now);
         require(_endTime >= _startTime);
         require(_wallet != address(0));
