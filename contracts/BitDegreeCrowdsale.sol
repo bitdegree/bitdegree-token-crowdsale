@@ -86,11 +86,6 @@ contract BitDegreeCrowdsale {
     event Refund(address indexed receiver, uint256 amount);
 
     /**
-     * @dev Event that is emitted when crowdsale gets finalized
-     */
-    event Finalized();
-
-    /**
      * @param _startTime Unix timestamp for the start of the token sale
      * @param _endTime Unix timestamp for the end of the token sale
      * @param _wallet Ethereum address to which the invested funds are forwarded
