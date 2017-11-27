@@ -164,7 +164,7 @@ contract BitDegreeCrowdsale {
         // Forward funds
         wallet.transfer(weiAmount);
 
-        // Allow transfers immediately after hard cap is reached
+        // Allow transfers 2 weeks after hard cap is reached
         if(tokensSold == hardCap) {
             reward.setStartTime(now + 2 weeks);
         }
