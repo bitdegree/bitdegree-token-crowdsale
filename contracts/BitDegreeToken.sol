@@ -7,8 +7,10 @@ contract BitDegreeToken is PausableToken {
     string public constant symbol = "BDG";
     uint8 public constant decimals = 18;
 
-    uint256 public constant totalSupply = 660000000 * (10 ** uint256(decimals));
-    uint256 public constant publicAmount = 336600000 * (10 ** uint256(decimals)); // Tokens for public
+    uint256 private constant TOKEN_UNIT = 10 ** uint256(decimals);
+
+    uint256 public constant totalSupply = 660000000 * TOKEN_UNIT;
+    uint256 public constant publicAmount = 336600000 * TOKEN_UNIT; // Tokens for public
 
     uint public startTime;
     address public crowdsaleAddress;
@@ -16,19 +18,19 @@ contract BitDegreeToken is PausableToken {
     struct TokenLock { uint256 amount; uint duration; bool withdrawn; }
 
     TokenLock public foundationLock = TokenLock({
-        amount: 66000000 * (10 ** uint256(decimals)),
+        amount: 66000000 * TOKEN_UNIT,
         duration: 360 days,
         withdrawn: false
     });
 
     TokenLock public teamLock = TokenLock({
-        amount: 66000000 * (10 ** uint256(decimals)),
+        amount: 66000000 * TOKEN_UNIT,
         duration: 720 days,
         withdrawn: false
     });
 
     TokenLock public advisorLock = TokenLock({
-        amount: 13200000 * (10 ** uint256(decimals)),
+        amount: 13200000 * TOKEN_UNIT,
         duration: 160 days,
         withdrawn: false
     });
